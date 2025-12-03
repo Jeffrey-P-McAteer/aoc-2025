@@ -1,0 +1,9 @@
+*.exe
+*.dll
+*.o
+build
+temp
+bin
+out
+
+
