@@ -1,20 +1,22 @@
 .intel_syntax noprefix
 
-global _start
+.section .rodata
+msg:
+    .ascii "Hello, world!\n"
+msglen = . - msg
 
-section .text
+.section .text
+.global _start
 
 _start:
-  mov rax, 1        ; write(
-  mov rdi, 1        ;   STDOUT_FILENO,
-  mov rsi, msg      ;   "Hello, world!\n",
-  mov rdx, msglen   ;   sizeof("Hello, world!\n")
-  syscall           ; );
+    # write(STDOUT_FILENO, msg, msglen)
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + msg]
+    mov rdx, OFFSET msglen    # Use OFFSET to get immediate value
+    syscall
 
-  mov rax, 60       ; exit(
-  mov rdi, 0        ;   EXIT_SUCCESS
-  syscall           ; );
-
-section .rodata
-  msg: db "Hello, world!", 10
-  msglen: equ $ - msg
+    # exit(0)
+    mov rax, 60
+    xor rdi, rdi
+    syscall
