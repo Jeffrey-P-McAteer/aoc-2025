@@ -22,7 +22,7 @@ def no_err(callback, d_val=None):
 
 def run(*cmd):
     print(f"> {' '.join(cmd)}")
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
 def main(args=sys.argv):
   bin_dir = os.path.join(REPO_DIR, 'bin')
