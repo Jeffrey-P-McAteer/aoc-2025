@@ -11,8 +11,10 @@ import subprocess
 import shutil
 import traceback
 import shlex
+import pathlib
 
 REPO_DIR = os.path.dirname(__file__)
+REPO_PATH = pathlib.Path(REPO_DIR).resolve()
 
 def no_err(callback, d_val=None):
   try:
@@ -23,6 +25,17 @@ def no_err(callback, d_val=None):
 def run(*cmd):
     print(f"> {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
+
+def output_of(*cmd):
+    print(f"> {' '.join(cmd)}")
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, check=True, text=True)
+    return r.stdout.strip()
+
+def rpath(path_s):
+  global REPO_PATH
+  p = pathlib.Path(path_s).resolve()
+  return p.relative_to(REPO_PATH)
+
 
 def main(args=sys.argv):
   bin_dir = os.path.join(REPO_DIR, 'bin')
@@ -43,7 +56,26 @@ def main(args=sys.argv):
         '-target', 'x86_64-linux',
         f'-femit-bin={bin_file}'
     )
-    run(bin_file)
+    for io_i in range(0,99):
+      input_file = os.path.join(directory, f'input{io_i}.txt')
+      output_file = os.path.join(directory, f'output{io_i}.txt')
+      if os.path.exists(input_file) and os.path.exists(output_file):
+        with open(input_file, 'r') as fd:
+          input_txt = fd.read().strip()
+        with open(output_file, 'r') as fd:
+          output_txt = fd.read().strip()
+
+        cmd_output = output_of(bin_file, input_file)
+        if cmd_output != output_txt:
+          print(f'FAILED input {io_i}')
+          print(f'Expected ({rpath(output_file)})')
+          print(f'{output_txt}')
+          print(f'Observed ({rpath(bin_file)} {rpath(input_file)})')
+          print(f'{cmd_output}')
+          print()
+        else:
+          print(f'PASSED {rpath(bin_file)} {rpath(input_file)} => {rpath(output_file)}')
+
 
 
 
