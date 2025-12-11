@@ -28,8 +28,21 @@ def run(*cmd):
 
 def output_of(*cmd):
     print(f"> {' '.join(cmd)}")
-    r = subprocess.run(cmd, stdout=subprocess.PIPE, check=True, text=True)
-    return r.stdout.strip()
+    r = None
+    try:
+      r = subprocess.run(cmd, stdout=subprocess.PIPE, check=True, text=True)
+    except:
+      if 'SIGSEGV' in traceback.format_exc():
+        # Run with gdbbin to dump a stack trace... as helpful as assembly stack trace can be!
+        try:
+          run('gdbbin', *cmd)
+        except:
+          return ''
+
+    if r is not None:
+      return r.stdout.strip()
+    else:
+      return ''
 
 def rpath(path_s):
   global REPO_PATH
