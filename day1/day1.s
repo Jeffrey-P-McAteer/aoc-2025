@@ -28,14 +28,20 @@
     .global _start
 
 _start:
-    # Check if we have a command line argument
-    # argc is at [rsp], argv[0] is at [rsp+8], argv[1] is at [rsp+16]
-    pop rax                       # Get argc
+    # At entry: rsp points to argc
+    # [rsp] = argc
+    # [rsp+8] = argv[0]
+    # [rsp+16] = argv[1]
+    # [rsp+24] = argv[2]
+    # etc.
+
+    # Check argc
+    mov rax, [rsp]                # Load argc
     cmp rax, 2                    # Need exactly 2 args (program name + filename)
     jne usage_error
 
-    pop rax                       # Pop argv[0] (program name, not needed)
-    pop r15                       # Pop argv[1] (filename) - save in r15
+    # Get argv[1] (the filename)
+    mov r15, [rsp + 16]           # Load pointer to filename string
 
     # Initialize total sum to 0
     mov qword ptr [rip + total_sum], 0
@@ -234,6 +240,7 @@ print_number:
     push rcx
     push rdx
     push rsi
+    push rdi
 
     mov rax, rdi                  # Number to convert
     lea rsi, [rip + num_buffer]
@@ -275,12 +282,15 @@ print_it:
     sub rdx, rsi
 
     # Print the number
+    push rax                      # Save rax before syscall
     mov rax, 1                    # sys_write
     mov rdi, 1                    # stdout
     # rsi already points to start of number
     # rdx already has length
     syscall
+    pop rax
 
+    pop rdi
     pop rsi
     pop rdx
     pop rcx
@@ -319,4 +329,3 @@ exit_success:
     mov rax, 60                   # sys_exit
     xor rdi, rdi                  # Success code
     syscall
-
