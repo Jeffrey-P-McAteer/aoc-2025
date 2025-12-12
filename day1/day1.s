@@ -1,6 +1,4 @@
-# add_ten.s - Read file from ARG1, add 10 to each number, print sum
-# Intel syntax for x86-64 Linux (Zig-compatible)
-
+# add_ten_debug.s - Simplified version with debugging
 .intel_syntax noprefix
 
 .section .data
@@ -18,137 +16,111 @@
     error_len = . - error_msg
 
 .section .bss
-    .lcomm file_buffer, 4096      # Buffer for file contents
-    .lcomm line_buffer, 256       # Buffer for current line
-    .lcomm num_buffer, 32         # Buffer for number to string conversion
-    .lcomm fd, 8                  # File descriptor
-    .lcomm total_sum, 8           # Running sum of all numbers
+    .lcomm file_buffer, 4096
+    .lcomm line_buffer, 256
+    .lcomm num_buffer, 32
+    .lcomm total_sum, 8
 
 .section .text
     .global _start
 
 _start:
-    # At entry: rsp points to argc
-    # [rsp] = argc
-    # [rsp+8] = argv[0]
-    # [rsp+16] = argv[1]
-    # [rsp+24] = argv[2]
-    # etc.
-
     # Check argc
-    mov rax, [rsp]                # Load argc
-    cmp rax, 2                    # Need exactly 2 args (program name + filename)
+    mov rax, [rsp]
+    cmp rax, 2
     jne usage_error
 
-    # Get argv[1] (the filename)
-    mov r15, [rsp + 16]           # Load pointer to filename string
+    # Get argv[1]
+    mov r15, [rsp + 16]
 
-    # Initialize total sum to 0
+    # Initialize sum
     mov qword ptr [rip + total_sum], 0
 
     # Open file
-    mov rax, 2                    # sys_open
-    mov rdi, r15                  # filename from argv[1]
-    mov rsi, 0                    # O_RDONLY
+    mov rax, 2
+    mov rdi, r15
+    mov rsi, 0
     mov rdx, 0
     syscall
 
     cmp rax, 0
-    jl open_error                 # Exit if open failed
-    mov [rip + fd], rax           # Save file descriptor
+    jl open_error
+    mov r12, rax              # Save fd in r12
 
-    # Read entire file into buffer
-    mov rax, 0                    # sys_read
-    mov rdi, [rip + fd]
+    # Read file
+    mov rax, 0
+    mov rdi, r12              # fd
     lea rsi, [rip + file_buffer]
     mov rdx, 4096
     syscall
 
     cmp rax, 0
-    jle close_and_exit            # Exit if read failed or empty
-    mov r12, rax                  # Save bytes read in r12
+    jle close_file
+    mov r13, rax              # bytes read in r13
 
     # Close file
-    mov rax, 3                    # sys_close
-    mov rdi, [rip + fd]
+    mov rax, 3
+    mov rdi, r12
     syscall
 
-    # Process buffer line by line
-    xor r13, r13                  # r13 = current position in file_buffer
+    # Process lines
+    xor r14, r14              # position in file_buffer
 
 process_lines:
-    cmp r13, r12
-    jge print_sum                 # Done if we've processed all bytes
+    cmp r14, r13
+    jge print_sum
 
-    # Extract one line
-    xor r14, r14                  # r14 = position in line_buffer
+    # Extract line
+    xor r15, r15              # position in line_buffer
     lea rsi, [rip + file_buffer]
     lea rdi, [rip + line_buffer]
 
 extract_line:
-    cmp r13, r12
-    jge line_complete             # End of file
+    cmp r14, r13
+    jge line_done
 
-    mov al, byte ptr [rsi + r13]
-    inc r13
+    mov al, byte ptr [rsi + r14]
+    inc r14
 
-    cmp al, 10                    # Check for newline
-    je line_complete
+    cmp al, 10
+    je line_done
 
-    cmp r14, 255                  # Prevent buffer overflow
+    cmp r15, 255
     jge extract_line
 
-    mov byte ptr [rdi + r14], al
-    inc r14
+    mov byte ptr [rdi + r15], al
+    inc r15
     jmp extract_line
 
-line_complete:
-    # Null terminate the line
-    mov byte ptr [rdi + r14], 0
-
-    # Check if line is empty
-    cmp r14, 0
+line_done:
+    cmp r15, 0
     je process_lines
 
-    # Parse line as integer
-    push r12                      # Save registers
-    push r13
-    push r14
+    mov byte ptr [rdi + r15], 0
 
+    # Parse number
     lea rdi, [rip + line_buffer]
-    mov rsi, r14                  # Line length
-    call parse_integer
+    mov rsi, r15
+    call parse_int
 
-    pop r14
-    pop r13
-    pop r12
-
-    # rax now contains the parsed number
-    mov rbx, rax                  # Save original number in rbx
-
-    # Add to total sum
+    mov rbx, rax              # save number
     add [rip + total_sum], rax
 
-    # Print: "number + 10 = result"
-    # First print the original number
-    push r12
-    push r13
-    push r14
-
+    # Print number
     mov rdi, rbx
-    call print_number
+    call print_num
 
     # Print " + 10 = "
-    mov rax, 1                    # sys_write
-    mov rdi, 1                    # stdout
+    mov rax, 1
+    mov rdi, 1
     lea rsi, [rip + plus_ten_msg]
     mov rdx, plus_ten_len
     syscall
 
-    # Print the number + 10
+    # Print number + 10
     add rbx, 10
     mov rdi, rbx
-    call print_number
+    call print_num
 
     # Print newline
     mov rax, 1
@@ -156,139 +128,107 @@ line_complete:
     lea rsi, [rip + newline]
     mov rdx, 1
     syscall
-
-    pop r14
-    pop r13
-    pop r12
 
     jmp process_lines
 
 print_sum:
-    # Print "Total sum: "
-    mov rax, 1                    # sys_write
-    mov rdi, 1                    # stdout
+    mov rax, 1
+    mov rdi, 1
     lea rsi, [rip + sum_msg]
     mov rdx, sum_len
     syscall
 
-    # Print the total sum
     mov rdi, [rip + total_sum]
-    call print_number
+    call print_num
 
-    # Print newline
     mov rax, 1
     mov rdi, 1
     lea rsi, [rip + newline]
     mov rdx, 1
     syscall
 
-    jmp exit_success
+    jmp exit_ok
 
-# Function: parse_integer
-# Input: rdi = pointer to string, rsi = length
-# Output: rax = parsed integer
-parse_integer:
+parse_int:
     push rbx
     push rcx
+    push rdx
 
-    xor rax, rax                  # Result accumulator
-    xor rcx, rcx                  # Index
-    xor rbx, rbx                  # Temp for digit
-    mov r8, 1                     # Sign (1 = positive, -1 = negative)
+    xor rax, rax
+    xor rcx, rcx
+    mov r8, 1
 
-    # Check for negative sign
     cmp byte ptr [rdi], '-'
-    jne parse_loop
-    inc rcx                       # Skip the '-'
+    jne .parse_loop
+    inc rcx
     mov r8, -1
 
-parse_loop:
+.parse_loop:
     cmp rcx, rsi
-    jge parse_done
+    jge .parse_done
 
     movzx rbx, byte ptr [rdi + rcx]
-
-    # Check if digit
     cmp rbx, '0'
-    jl parse_done                 # Stop at non-digit
+    jl .parse_done
     cmp rbx, '9'
-    jg parse_done                 # Stop at non-digit
+    jg .parse_done
 
-    # Convert ASCII to digit
     sub rbx, '0'
-
-    # result = result * 10 + digit
     imul rax, 10
     add rax, rbx
-
     inc rcx
-    jmp parse_loop
+    jmp .parse_loop
 
-parse_done:
-    # Apply sign
+.parse_done:
     imul rax, r8
-
+    pop rdx
     pop rcx
     pop rbx
     ret
 
-# Function: print_number
-# Input: rdi = number to print
-# Output: none
-print_number:
+print_num:
     push rbx
     push rcx
     push rdx
     push rsi
     push rdi
 
-    mov rax, rdi                  # Number to convert
+    mov rax, rdi
     lea rsi, [rip + num_buffer]
-    add rsi, 31                   # Point to end of buffer
-    mov byte ptr [rsi], 0         # Null terminate
+    add rsi, 31
+    mov byte ptr [rsi], 0
     dec rsi
 
-    # Handle negative numbers
-    mov r8, 1                     # Sign flag
+    mov r8, 1
     cmp rax, 0
-    jge convert_loop
-    neg rax                       # Make positive
-    mov r8, -1                    # Remember it was negative
+    jge .convert
+    neg rax
+    mov r8, -1
 
-convert_loop:
+.convert:
     xor rdx, rdx
     mov rbx, 10
-    div rbx                       # rax = rax / 10, rdx = remainder
-
-    add dl, '0'                   # Convert to ASCII
+    div rbx
+    add dl, '0'
     mov byte ptr [rsi], dl
     dec rsi
-
     cmp rax, 0
-    jne convert_loop
+    jne .convert
 
-    # Add negative sign if needed
     cmp r8, -1
-    jne print_it
+    jne .print
     mov byte ptr [rsi], '-'
     dec rsi
 
-print_it:
-    inc rsi                       # Move to first character
-
-    # Calculate length
+.print:
+    inc rsi
     lea rdx, [rip + num_buffer]
     add rdx, 31
     sub rdx, rsi
 
-    # Print the number
-    push rax                      # Save rax before syscall
-    mov rax, 1                    # sys_write
-    mov rdi, 1                    # stdout
-    # rsi already points to start of number
-    # rdx already has length
+    mov rax, 1
+    mov rdi, 1
     syscall
-    pop rax
 
     pop rdi
     pop rsi
@@ -298,34 +238,31 @@ print_it:
     ret
 
 usage_error:
-    mov rax, 1                    # sys_write
-    mov rdi, 2                    # stderr
+    mov rax, 1
+    mov rdi, 2
     lea rsi, [rip + usage_msg]
     mov rdx, usage_len
     syscall
-
-    mov rax, 60                   # sys_exit
-    mov rdi, 1                    # Error code
+    mov rax, 60
+    mov rdi, 1
     syscall
 
 open_error:
-    mov rax, 1                    # sys_write
-    mov rdi, 2                    # stderr
+    mov rax, 1
+    mov rdi, 2
     lea rsi, [rip + error_msg]
     mov rdx, error_len
     syscall
-
-    mov rax, 60                   # sys_exit
-    mov rdi, 1                    # Error code
+    mov rax, 60
+    mov rdi, 1
     syscall
 
-close_and_exit:
-    mov rax, 3                    # sys_close
-    mov rdi, [rip + fd]
+close_file:
+    mov rax, 3
+    mov rdi, r12
     syscall
-    jmp exit_success
 
-exit_success:
-    mov rax, 60                   # sys_exit
-    xor rdi, rdi                  # Success code
+exit_ok:
+    mov rax, 60
+    xor rdi, rdi
     syscall
